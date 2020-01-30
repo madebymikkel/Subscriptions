@@ -3,8 +3,12 @@
 namespace MadeByMikkel\Subscriptions;
 
 use Carbon\Carbon;
+use MadeByMikkel\Subscriptions\Exceptions\AlreadySubscribedException;
+use MadeByMikkel\Subscriptions\Exceptions\InvalidAmountException;
+use MadeByMikkel\Subscriptions\Exceptions\PlanNotFoundException;
 use MadeByMikkel\Subscriptions\Models\Subscription;
 use MadeByMikkel\Subscriptions\Models\SubscriptionPlan;
+use MadeByMikkel\Subscriptions\Models\Charge;
 use Stripe\Charge as StripeCharge;
 use Stripe\Customer;
 
@@ -13,30 +17,30 @@ trait Subscribable {
     /**
      * @param $plan_id
      * @param array $options
-     * @return bool|mixed
+     * @return mixed
+     * @throws AlreadySubscribedException
+     * @throws InvalidAmountException
+     * @throws PlanNotFoundException
      * @throws \Stripe\Exception\ApiErrorException
      */
     public function beginSubscription ( $plan_id, array $options = [] ) {
 
         if ( $this->subscribed() ) {
-            return false;
+            throw new AlreadySubscribedException('The user with the id ' . $this->id . ' is already a subscriber');
         }
 
         $subscription_plan = SubscriptionPlan::find($plan_id);
 
         if ( !$subscription_plan ) {
-            return $this->subscription_fails();
+            throw new PlanNotFoundException('The plan with the id ' . $subscription_plan->id . ' doesn\'t exist.');
         }
 
-        $charge = $this->charge($subscription_plan, $options);
-
-        if ( !$charge ) {
-            return $this->subscription_fails();
-        }
+        $this->charge($subscription_plan, $options);
 
         return $this->createSubscription($subscription_plan) ?
             $this->subscription_success()
             : $this->subscription_fails();
+
     }
 
     /**
@@ -69,82 +73,130 @@ trait Subscribable {
         ]);
 
         if ( !$subscription ) {
-            return false;
+            throw new \InvalidArgumentException();
         }
 
         return true;
+
     }
 
     /**
      * @return mixed
      */
     public function subscribed () {
+
         return Subscription::whereUserId($this->id)->first();
+
     }
 
     /**
      * @param $subscription_plan
      * @param array $options
      * @return bool
+     * @throws InvalidAmountException
      * @throws \Stripe\Exception\ApiErrorException
      */
     private function charge ( $subscription_plan, array $options = [] ) {
 
-        if ( !$subscription_plan ) {
-            return false;
-        }
-
         if ( !array_key_exists('token', $options) ) {
-            return false;
+            throw new \InvalidArgumentException();
         }
 
         if ( $subscription_plan->amount <= 0 ) {
-            return false;
+            throw new InvalidAmountException('The plan with the id ' . $subscription_plan->id . ' has an invalid amount of ' . $subscription_plan->amount . '.');
         }
 
-        $source = [
-            'amount'      => $subscription_plan->amount,
-            'currency'    => config('subscriptions.currency'),
-            'source'      => $options[ 'token' ],
-            'description' => $subscription_plan->description
-        ];
-
-        if ( is_null($this->stripe_id) ) {
-            $customer = Customer::create([
-                'email'  => $this->email,
-                'source' => $options[ 'token' ],
-            ], $this->options());
-
-            if ( is_null($customer) || !$customer ) {
-                return false;
-            }
-
-            $card = Customer::retrieveSource($customer->id, $customer->default_source, null, $this->options());
-
-            if ( is_null($card) || !$card ) {
-                return false;
-            }
-
-            $this->update([
-                'stripe_id'      => $customer->id,
-                'card_brand'     => $card->brand,
-                'card_last_four' => $card->last4
-            ]);
-
-            array_push($source, [
-                'customer' => $customer->id
-            ]);
-            unset($source[ 'source' ]);
+        if ( !$this->hasStripeId() ) {
+            return $this->createStripeCustomer($options);
         }
 
-        $charge = StripeCharge::create($source, $this->options());
+        $charge = $this->createCharge($subscription_plan, $this->createStripeCharge($subscription_plan));
 
         if ( !$charge ) {
-            return false;
+            throw new \InvalidArgumentException();
         }
 
-
         return true;
+
+    }
+
+    private function createCharge($subscription_plan, $stripe_charge) {
+        return Charge::create([
+            'user_id'   => $this->id,
+            'plan_id'   => $subscription_plan->id,
+            'charge_id' => $stripe_charge->id,
+            'amount'    => $stripe_charge->amount,
+            'paid'      => Carbon::now()
+        ]);
+    }
+
+
+    /**
+     * @param $subscription_plan
+     * @return StripeCharge
+     * @throws \Stripe\Exception\ApiErrorException
+     */
+    private function createStripeCharge($subscription_plan) {
+        return StripeCharge::create([
+            'amount'      => $subscription_plan->amount,
+            'currency'    => config('subscriptions.currency'),
+            'description' => $subscription_plan->description,
+            'customer1'   => $this->stripe_id
+        ], $this->options());
+    }
+
+    /**
+     * @param array $options
+     * @return bool
+     * @throws \Stripe\Exception\ApiErrorException
+     */
+    private function createStripeCustomer ( array $options = [] ) {
+
+        $customer = Customer::create([
+            'email'  => $this->email,
+            'source' => $options[ 'token' ],
+        ], $this->options());
+
+        $card = $this->getDefaultCard($customer->id, $customer->default_source);
+
+        return $this->updateCard($customer->id, $card->brand, $card->last4);
+
+    }
+
+    /**
+     * @param $customer_id
+     * @param $default_source
+     * @return \Stripe\ApiResource
+     * @throws \Stripe\Exception\ApiErrorException
+     */
+    private function getDefaultCard ( $customer_id, $default_source ) {
+
+        return Customer::retrieveSource($customer_id, $default_source, null, $this->options());
+
+    }
+
+    /**
+     * @param $customer_id
+     * @param $card_brand
+     * @param $card_last_four
+     * @return mixed
+     */
+    private function updateCard ( $customer_id, $card_brand, $card_last_four ) {
+
+        return $this->update([
+            'stripe_id'      => $customer_id,
+            'card_brand'     => $card_brand,
+            'card_last_four' => $card_last_four
+        ]);
+
+    }
+
+    /**
+     * @return bool
+     */
+    public function hasStripeId () {
+
+        return !is_null($this->stripe_id);
 
     }
 
@@ -153,6 +205,8 @@ trait Subscribable {
      * @return array
      */
     public function options ( array $options = [] ) {
+
         return Subscriptions::options($options);
+
     }
 }

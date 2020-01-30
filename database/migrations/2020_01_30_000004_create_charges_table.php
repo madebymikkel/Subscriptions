@@ -14,8 +14,9 @@ class CreateChargesTable extends Migration {
         Schema::create('charges', function (Blueprint $table) {
             $table->uuid('id')->primary()->unique();
             $table->bigInteger('user_id');
+            $table->uuid('plan_id')->nullable();
             $table->uuid('invoice_id')->nullable();
-            $table->string('charge_id');
+            $table->string('charge_id')->nullable();
 
             $table->integer('amount')->default(0);
             $table->integer('amount_refunded')->default(0);
