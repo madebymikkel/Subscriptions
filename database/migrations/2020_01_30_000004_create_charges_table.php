@@ -21,8 +21,11 @@ class CreateChargesTable extends Migration {
             $table->integer('amount')->default(0);
             $table->integer('amount_refunded')->default(0);
 
+            $table->integer('attempted_count')->default(0);
+
             $table->dateTime('paid')->nullable();
             $table->dateTime('refunded')->nullable();
+            $table->dateTime('attempted')->nullable();
 
             $table->timestamps();
             $table->softDeletes();

@@ -28,7 +28,7 @@ trait Subscribable {
      */
     public function beginSubscription ( $plan_id, array $options = [] ) {
 
-        if ( $this->subscribed() ) {
+        if ( $this->hasSubscription() ) {
             throw new AlreadySubscribedException('The user with the id ' . $this->id . ' is already a subscriber');
         }
 
@@ -38,10 +38,12 @@ trait Subscribable {
             throw new PlanNotFoundException('The plan with the id ' . $subscription_plan->id . ' doesn\'t exist.');
         }
 
-        $this->charge($subscription_plan, $options);
+        $charge = $this->charge($subscription_plan, $options);
 
-        return $this->createSubscription($subscription_plan) ?
-            $this->subscription_success()
+        $subscription = $this->createSubscription($subscription_plan);
+
+        return $subscription ?
+            $this->subscribed($subscription, $charge)
             : redirect($this->redirectPath());
 
     }
@@ -54,12 +56,25 @@ trait Subscribable {
         return property_exists($this, 'redirectTo') ? $this->redirectTo : '/home';
     }
 
+    public function charges() {
+        return $this->hasMany(Charge::class, $this->getForeignKey());
+    }
+
+    public function subscriptions() {
+        return $this->hasMany(Subscription::class, $this->getForeignKey());
+    }
+
+    public function subscription() {
+        return $this->hasOne(Subscription::class, $this->getForeignKey());
+    }
+
     /**
      * The subscription was created successfully.
      *
+     * @param Subscription $subscription
      * @return mixed
      */
-    protected function subscription_success () {
+    protected function subscribed ($subscription, $charge) {
     }
 
     /**
@@ -67,25 +82,17 @@ trait Subscribable {
      * @return bool
      */
     private function createSubscription ( $subscription_plan ) {
-
-        $subscription = $this->subscriptions()->create([
+        return $this->subscriptions()->create([
             'plan_id'      => $subscription_plan->id,
             'period_start' => Carbon::now(),
             'period_end'   => Carbon::now()->addMonths($subscription_plan->interval),
         ]);
-
-        if ( !$subscription ) {
-            throw new QueryException('Subscription wasn\'t able to be created.');
-        }
-
-        return true;
-
     }
 
     /**
      * @return mixed
      */
-    public function subscribed () {
+    public function hasSubscription () {
         return Subscription::whereUserId($this->id)->first();
     }
 
@@ -116,7 +123,7 @@ trait Subscribable {
             throw new QueryException('Charge wasn\'t able to be created.');
         }
 
-        return true;
+        return $charge;
 
     }
 
