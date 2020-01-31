@@ -72,14 +72,15 @@ trait Subscribable {
      * The subscription was created successfully.
      *
      * @param Subscription $subscription
+     * @param $charge
      * @return mixed
      */
     protected function subscribed ($subscription, $charge) {
     }
 
     /**
-     * @param null $subscription_plan
-     * @return bool
+     * @param $subscription_plan
+     * @return mixed
      */
     private function createSubscription ( $subscription_plan ) {
         return $this->subscriptions()->create([
@@ -120,7 +121,7 @@ trait Subscribable {
         $charge = $this->createCharge($subscription_plan, $this->createStripeCharge($subscription_plan));
 
         if ( !$charge ) {
-            throw new QueryException('Charge wasn\'t able to be created.');
+            throw new QueryException('Charge wasn\'t able to be created.', null, null);
         }
 
         return $charge;
