@@ -11,7 +11,7 @@ class CreateSubscriptionsTable extends Migration {
      * @return void
      */
     public function up () {
-        Schema::create('subscriptions', function (Blueprint $table) {
+        Schema::create('subscriptions', function ( Blueprint $table ) {
             $table->uuid('id')->primary()->unique();
             $table->bigInteger('user_id');
             $table->uuid('plan_id');

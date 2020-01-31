@@ -11,7 +11,7 @@ class CreateInvoicesTable extends Migration {
      * @return void
      */
     public function up () {
-        Schema::create('invoices', function (Blueprint $table) {
+        Schema::create('invoices', function ( Blueprint $table ) {
             $table->uuid('id')->primary()->unique();
             $table->bigInteger('user_id')->unsigned();
             $table->uuid('charge_id');

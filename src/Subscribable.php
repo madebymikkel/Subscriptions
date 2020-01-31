@@ -3,6 +3,7 @@
 namespace MadeByMikkel\Subscriptions;
 
 use Carbon\Carbon;
+use Illuminate\Database\QueryException;
 use MadeByMikkel\Subscriptions\Exceptions\AlreadySubscribedException;
 use MadeByMikkel\Subscriptions\Exceptions\InvalidAmountException;
 use MadeByMikkel\Subscriptions\Exceptions\PlanNotFoundException;
@@ -13,6 +14,8 @@ use Stripe\Charge as StripeCharge;
 use Stripe\Customer;
 
 trait Subscribable {
+
+    private $redirectTo;
 
     /**
      * @param $plan_id
@@ -39,16 +42,16 @@ trait Subscribable {
 
         return $this->createSubscription($subscription_plan) ?
             $this->subscription_success()
-            : $this->subscription_fails();
+            : redirect($this->redirectPath());
 
     }
 
-    /**
-     * The subscription failed.
-     *
-     * @return mixed
-     */
-    protected function subscription_fails () {
+    public function redirectPath () {
+        if ( method_exists($this, 'redirectTo') ) {
+            return $this->redirectTo();
+        }
+
+        return property_exists($this, 'redirectTo') ? $this->redirectTo : '/home';
     }
 
     /**
@@ -65,15 +68,14 @@ trait Subscribable {
      */
     private function createSubscription ( $subscription_plan ) {
 
-        $subscription = Subscription::create([
-            'user_id'      => $this->id,
+        $subscription = $this->subscriptions()->create([
             'plan_id'      => $subscription_plan->id,
             'period_start' => Carbon::now(),
             'period_end'   => Carbon::now()->addMonths($subscription_plan->interval),
         ]);
 
         if ( !$subscription ) {
-            throw new \InvalidArgumentException();
+            throw new QueryException('Subscription wasn\'t able to be created.');
         }
 
         return true;
@@ -84,9 +86,7 @@ trait Subscribable {
      * @return mixed
      */
     public function subscribed () {
-
         return Subscription::whereUserId($this->id)->first();
-
     }
 
     /**
@@ -113,16 +113,15 @@ trait Subscribable {
         $charge = $this->createCharge($subscription_plan, $this->createStripeCharge($subscription_plan));
 
         if ( !$charge ) {
-            throw new \InvalidArgumentException();
+            throw new QueryException('Charge wasn\'t able to be created.');
         }
 
         return true;
 
     }
 
-    private function createCharge($subscription_plan, $stripe_charge) {
-        return Charge::create([
-            'user_id'   => $this->id,
+    private function createCharge ( $subscription_plan, $stripe_charge ) {
+        return $this->charges()->create([
             'plan_id'   => $subscription_plan->id,
             'charge_id' => $stripe_charge->id,
             'amount'    => $stripe_charge->amount,
@@ -136,12 +135,12 @@ trait Subscribable {
      * @return StripeCharge
      * @throws \Stripe\Exception\ApiErrorException
      */
-    private function createStripeCharge($subscription_plan) {
+    private function createStripeCharge ( $subscription_plan ) {
         return StripeCharge::create([
             'amount'      => $subscription_plan->amount,
             'currency'    => config('subscriptions.currency'),
             'description' => $subscription_plan->description,
-            'customer1'   => $this->stripe_id
+            'customer'    => $this->stripe_id
         ], $this->options());
     }
 
@@ -170,9 +169,7 @@ trait Subscribable {
      * @throws \Stripe\Exception\ApiErrorException
      */
     private function getDefaultCard ( $customer_id, $default_source ) {
-
         return Customer::retrieveSource($customer_id, $default_source, null, $this->options());
-
     }
 
     /**
@@ -182,22 +179,18 @@ trait Subscribable {
      * @return mixed
      */
     private function updateCard ( $customer_id, $card_brand, $card_last_four ) {
-
         return $this->update([
             'stripe_id'      => $customer_id,
             'card_brand'     => $card_brand,
             'card_last_four' => $card_last_four
         ]);
-
     }
 
     /**
      * @return bool
      */
     public function hasStripeId () {
-
         return !is_null($this->stripe_id);
-
     }
 
     /**
@@ -205,8 +198,6 @@ trait Subscribable {
      * @return array
      */
     public function options ( array $options = [] ) {
-
         return Subscriptions::options($options);
-
     }
 }

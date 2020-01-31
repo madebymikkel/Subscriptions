@@ -11,7 +11,7 @@ class CreateSubscriptionPlansTable extends Migration {
      * @return void
      */
     public function up () {
-        Schema::create('subscription_plans', function (Blueprint $table) {
+        Schema::create('subscription_plans', function ( Blueprint $table ) {
             $table->uuid('id')->primary()->unique();
 
             $table->string('title');
