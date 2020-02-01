@@ -13,10 +13,11 @@ class CreateInvoiceLinesTable extends Migration {
     public function up () {
         Schema::create('invoice_lines', function ( Blueprint $table ) {
             $table->uuid('id')->primary()->unique();
-            $table->uuid('invoice_id');
-            $table->uuid('subscription_id')->nullable();
-            $table->uuid('plan_id')->nullable();
-            $table->uuid('charge_id')->nullable();
+
+            $table->uuid('invoice_id')->index();
+            $table->uuid('subscription_id')->nullable()->index();
+            $table->uuid('plan_id')->nullable()->index();
+            $table->uuid('charge_id')->nullable()->index();
 
             $table->string('currency')->default(config('subscriptions.currency'));
             $table->text('description')->nullable();
@@ -30,6 +31,11 @@ class CreateInvoiceLinesTable extends Migration {
 
             $table->timestamps();
             $table->softDeletes();
+
+            $table->foreign('invoice_id')->references('id')->on('invoices');
+            $table->foreign('subscription_id')->references('id')->on('subscriptions');
+            $table->foreign('plan_id')->references('id')->on('subscription_plans');
+            $table->foreign('charge_id')->references('id')->on('charges');
         });
     }
 

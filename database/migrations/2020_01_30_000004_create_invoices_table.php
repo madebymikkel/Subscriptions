@@ -13,7 +13,7 @@ class CreateInvoicesTable extends Migration {
     public function up () {
         Schema::create('invoices', function ( Blueprint $table ) {
             $table->uuid('id')->primary()->unique();
-            $table->bigInteger('user_id')->unsigned();
+            $table->bigInteger('user_id')->unsigned()->index();
 
             $table->timestamps();
             $table->softDeletes();

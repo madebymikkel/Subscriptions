@@ -13,10 +13,11 @@ class CreateChargesTable extends Migration {
     public function up () {
         Schema::create('charges', function ( Blueprint $table ) {
             $table->uuid('id')->primary()->unique();
-            $table->bigInteger('user_id');
-            $table->uuid('plan_id')->nullable();
-            $table->uuid('invoice_id')->nullable();
-            $table->string('charge_id')->nullable();
+
+            $table->bigInteger('user_id')->unsigned()->index();
+            $table->uuid('plan_id')->nullable()->index();
+            $table->uuid('invoice_id')->nullable()->index();
+            $table->string('charge_id')->nullable()->index();
 
             $table->integer('amount')->default(0);
             $table->integer('amount_refunded')->default(0);
@@ -29,6 +30,9 @@ class CreateChargesTable extends Migration {
 
             $table->timestamps();
             $table->softDeletes();
+
+            $table->foreign('plan_id')->references('id')->on('subscription_plans');
+            $table->foreign('invoice_id')->references('id')->on('invoices');
         });
     }
 

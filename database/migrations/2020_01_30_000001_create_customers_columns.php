@@ -12,7 +12,7 @@ class CreateCustomersColumns extends Migration {
      */
     public function up () {
         Schema::table('users', function ( Blueprint $table ) {
-            $table->string('stripe_id')->nullable()->index();
+            $table->string('stripe_id')->nullable();
             $table->string('card_brand')->nullable();
             $table->string('card_last_four', 4)->nullable();
         });

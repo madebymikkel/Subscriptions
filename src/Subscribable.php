@@ -16,18 +16,17 @@ use Stripe\Customer;
 
 trait Subscribable {
 
-    private $redirectTo;
-
     /**
      * @param $plan_id
      * @param array $options
+     * @param \Closure|null $fallback
      * @return mixed
      * @throws AlreadySubscribedException
      * @throws InvalidAmountException
      * @throws PlanNotFoundException
      * @throws \Stripe\Exception\ApiErrorException
      */
-    public function beginSubscription ( $plan_id, array $options = [] ) {
+    public function beginSubscription ( $plan_id, array $options = [], \Closure $fallback = null ) {
 
         if ( $this->hasSubscription() ) {
             throw new AlreadySubscribedException('The user with the id ' . $this->id . ' is already a subscriber');
@@ -49,16 +48,8 @@ trait Subscribable {
 
         return $subscription ?
             $this->subscribed($subscription, $charge)
-            : redirect($this->redirectPath());
+            : $fallback();
 
-    }
-
-    public function redirectPath () {
-        if ( method_exists($this, 'redirectTo') ) {
-            return $this->redirectTo();
-        }
-
-        return property_exists($this, 'redirectTo') ? $this->redirectTo : '/home';
     }
 
     /**

@@ -13,21 +13,23 @@ class CreateSubscriptionsTable extends Migration {
     public function up () {
         Schema::create('subscriptions', function ( Blueprint $table ) {
             $table->uuid('id')->primary()->unique();
-            $table->bigInteger('user_id');
-            $table->uuid('plan_id');
+            $table->bigInteger('user_id')->unsigned()->index();
+            $table->uuid('plan_id')->index();
 
+            $table->boolean('cancel_at_period_end')->default(false);
 
             $table->dateTime('period_start')->nullable();
             $table->dateTime('period_end')->nullable();
 
             $table->dateTime('cancelled_at')->nullable();
-            $table->dateTime('cancel_at_period_end')->nullable();
 
             $table->dateTime('trial_start')->nullable();
             $table->dateTime('trial_end')->nullable();
 
             $table->timestamps();
             $table->softDeletes();
+
+            $table->foreign('plan_id')->references('id')->on('subscription_plans');
         });
     }
 
