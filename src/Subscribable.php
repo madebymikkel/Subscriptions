@@ -5,11 +5,12 @@ namespace MadeByMikkel\Subscriptions;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use MadeByMikkel\Subscriptions\Exceptions\AlreadySubscribedException;
+use MadeByMikkel\Subscriptions\Exceptions\FailedToCreateSubscription;
 use MadeByMikkel\Subscriptions\Exceptions\InvalidAmountException;
 use MadeByMikkel\Subscriptions\Exceptions\PlanNotFoundException;
+use MadeByMikkel\Subscriptions\Models\Charge;
 use MadeByMikkel\Subscriptions\Models\Subscription;
 use MadeByMikkel\Subscriptions\Models\SubscriptionPlan;
-use MadeByMikkel\Subscriptions\Models\Charge;
 use Stripe\Charge as StripeCharge;
 use Stripe\Customer;
 
@@ -40,6 +41,10 @@ trait Subscribable {
 
         $charge = $this->charge($subscription_plan, $options);
 
+        if ( !$charge ) {
+            throw new QueryException('Charge wasn\'t able to be created.', null, null);
+        }
+
         $subscription = $this->createSubscription($subscription_plan);
 
         return $subscription ?
@@ -56,18 +61,6 @@ trait Subscribable {
         return property_exists($this, 'redirectTo') ? $this->redirectTo : '/home';
     }
 
-    public function charges() {
-        return $this->hasMany(Charge::class, $this->getForeignKey());
-    }
-
-    public function subscriptions() {
-        return $this->hasMany(Subscription::class, $this->getForeignKey());
-    }
-
-    public function subscription() {
-        return $this->hasOne(Subscription::class, $this->getForeignKey());
-    }
-
     /**
      * The subscription was created successfully.
      *
@@ -75,7 +68,7 @@ trait Subscribable {
      * @param $charge
      * @return mixed
      */
-    protected function subscribed ($subscription, $charge) {
+    protected function subscribed ( $subscription, $charge ) {
     }
 
     /**
@@ -94,7 +87,30 @@ trait Subscribable {
      * @return mixed
      */
     public function hasSubscription () {
-        return Subscription::whereUserId($this->id)->first();
+        return !is_null($this->subscription);
+    }
+
+    /**
+     * @param $subscription
+     * @return mixed
+     * @throws FailedToCreateSubscription
+     * @throws InvalidAmountException
+     * @throws \Stripe\Exception\ApiErrorException
+     */
+    public function renewSubscription ( $subscription ) {
+        $charge = $this->charge($subscription->plan);
+
+        if ( !$charge ) {
+            throw new QueryException('Couldn\'t charge the customer.', null, null);
+        }
+
+        $new_subscription = $this->createSubscription($subscription->plan);
+
+        if (is_null($new_subscription)) {
+            throw new FailedToCreateSubscription('Failed to create subscription on renewal.');
+        }
+
+        return $subscription->delete();
     }
 
     /**
@@ -106,25 +122,15 @@ trait Subscribable {
      */
     private function charge ( $subscription_plan, array $options = [] ) {
 
-        if ( !array_key_exists('token', $options) ) {
-            throw new \InvalidArgumentException();
-        }
-
         if ( $subscription_plan->amount <= 0 ) {
             throw new InvalidAmountException('The plan with the id ' . $subscription_plan->id . ' has an invalid amount of ' . $subscription_plan->amount . '.');
         }
 
         if ( !$this->hasStripeId() ) {
-            return $this->createStripeCustomer($options);
+            $this->createStripeCustomer($options);
         }
 
-        $charge = $this->createCharge($subscription_plan, $this->createStripeCharge($subscription_plan));
-
-        if ( !$charge ) {
-            throw new QueryException('Charge wasn\'t able to be created.', null, null);
-        }
-
-        return $charge;
+        return $this->createCharge($subscription_plan, $this->createStripeCharge($subscription_plan));
 
     }
 
@@ -192,6 +198,27 @@ trait Subscribable {
             'card_brand'     => $card_brand,
             'card_last_four' => $card_last_four
         ]);
+    }
+
+    /**
+     * @return Charge
+     */
+    public function charges () {
+        return $this->hasMany(Charge::class, $this->getForeignKey());
+    }
+
+    /**
+     * @return Subscription
+     */
+    public function subscriptions () {
+        return $this->hasMany(Subscription::class, $this->getForeignKey());
+    }
+
+    /**
+     * @return Subscription
+     */
+    public function subscription () {
+        return $this->hasOne(Subscription::class, $this->getForeignKey());
     }
 
     /**

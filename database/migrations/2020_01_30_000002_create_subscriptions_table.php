@@ -16,12 +16,12 @@ class CreateSubscriptionsTable extends Migration {
             $table->bigInteger('user_id');
             $table->uuid('plan_id');
 
-            $table->boolean('cancel_at_period_end')->default(false);
 
             $table->dateTime('period_start')->nullable();
             $table->dateTime('period_end')->nullable();
 
             $table->dateTime('cancelled_at')->nullable();
+            $table->dateTime('cancel_at_period_end')->nullable();
 
             $table->dateTime('trial_start')->nullable();
             $table->dateTime('trial_end')->nullable();
